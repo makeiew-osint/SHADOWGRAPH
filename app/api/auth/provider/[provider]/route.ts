@@ -1,3 +1,5 @@
-import { json } from '../../../../../lib/key-auth';
+import { startProvider } from '../../../../../lib/social-auth';
 export const dynamic = 'force-dynamic';
-export async function GET() { return json({ error: 'Этот провайдер ещё не подключён владельцем. Сейчас доступен вход по ключу.' }, 503); }
+export async function GET(request: Request, context: { params: Promise<{ provider: string }> }) {
+  return startProvider(request, (await context.params).provider);
+}

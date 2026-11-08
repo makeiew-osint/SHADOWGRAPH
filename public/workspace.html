@@ -114,6 +114,7 @@ const Analyzer=(()=>{
  const norm=s=>String(s??'').normalize('NFKC').trim().replace(/\s+/g,' ');
  const aliases={phone:'phone|phone_number|telephone|mobile|tel|телефон|номер телефона|мобильный|тел|сотовый',username:'username|user_name|login|nickname|nick|handle|user|telegram|tg|instagram|insta|twitter|vk|tiktok|youtube|facebook|discord|github|linkedin|reddit|twitch|bluesky|вк|тг|инст|инста|ютуб|инстаграм|юзер|юзернейм|логин|никнейм|ник|пользователь|телеграм',person:'full_name|fullname|fio|name|person|contact_name|имя|фио|ф\.и\.о\.?|полное имя|контакт',address:'address|street_address|postal_address|streetaddress|адрес|адрес проживания|место жительства',email:'e_?mail|электронная почта|почта',organization:'organization|organisation|company|employer|org|организация|компания|работодатель',url:'url|website|web|link|сайт|ссылка',account:'user_id|account_id|telegram_id|vk_id|id пользователя|идентификатор пользователя',date:'birth_date|birthdate|birthday|dob|дата рождения'};
  aliases.phone+='|контактный телефон|контактный номер|номер мобильного|телефон для связи';aliases.person+='|фамилия имя отчество|фамилия, имя, отчество|имя и фамилия';aliases.organization+='|место работы|наименование организации';aliases.address+='|почтовый адрес|фактический адрес|регистрация';aliases.email+='|email_address|email address|эл\. почта';
+ Object.assign(aliases,{employment:'работа|должность|профессия|занятость|employment|job|occupation|job_title',education:'образование|учёба|учеба|вуз|университет|education|university|school',hobby:'хобби|увлечения|интересы|hobby|hobbies|interests',pet:'питомец|питомцы|домашнее животное|pet|pets',vehicle:'авто|автомобиль|машина|транспорт|vehicle|car|automobile'});
  const fieldPattern=new RegExp('(?:^|[\\s;,|\\t])('+Object.values(aliases).join('|')+')[ \\t]*[:=][ \\t]*','giu');
  const fields=new Map;for(const [type,list] of Object.entries(aliases))for(const a of list.split('|'))fields.set(a,type);
  function birthDate(raw){const s=String(raw).trim(),m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)||s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);if(!m)return null;const iso=m[1].length===4,y=+(iso?m[1]:m[3]),month=+m[2],day=+(iso?m[3]:m[1]),d=new Date(Date.UTC(y,month-1,day));if(y<1850||y>new Date().getFullYear()||d.getUTCFullYear()!==y||d.getUTCMonth()!==month-1||d.getUTCDate()!==day||d.getTime()>Date.now())return null;return String(day).padStart(2,'0')+'.'+String(month).padStart(2,'0')+'.'+y}
@@ -151,7 +152,7 @@ const Analyzer=(()=>{
  if(!/(?:г(?:ород)?\.?)\s*[А-ЯЁ][а-яё-]+[ ,]+(?:ул|пр|пер|шоссе|наб)/u.test(s))for(const m of s.matchAll(/(?:ул(?:ица)?\.?|проспект|пр-т|переулок|пер\.?|шоссе)\s+[А-ЯЁ][^\n;<>]{1,65}?(?:,?\s*(?:д(?:ом)?\.?)\s*\d+[А-Яа-я\d/-]*(?:\s*,?\s*кв\.?\s*\d+)?)/gu))put('address',m[0],'улица и номер дома','','средняя');
  for(const m of s.matchAll(/\b\d{1,6}\s+(?:[A-Z][\w'-]*\s+){1,5}(?:Street|St|Road|Rd|Avenue|Ave|Lane|Ln|Drive|Dr|Boulevard|Blvd)\b\.?/g))put('address',m[0],'номер дома и улица','','средняя');
  }
- function field(k,value,path,record){const type=fieldType(k),hint=networkHint(k);if(type&&!['given','surname','patronymic'].includes(type)&&['string','number'].includes(typeof value)){let label=String(value);if(type==='url'&&!/^(https?:|www\.)/i.test(label)&&/^[\w.-]+\.[a-z]{2,}/i.test(label))label='https://'+label;const vals=['phone','email','username'].includes(type)?label.split(type==='phone'?/\s*[;,|/\n]\s*/:/\s*[;,|\n]\s*/):[label];for(const v of vals)if(type!=='username'||!/^https?:/i.test(v))add(type,v,ev('поле «'+k+'»',path,value),['username','account'].includes(type)?hint:'',record)}scan(value,path,record,hint)}
+ function field(k,value,path,record){const type=fieldType(k),hint=networkHint(k);if(type&&!['given','surname','patronymic'].includes(type)&&['string','number'].includes(typeof value)){let label=String(value);if(type==='url'&&!/^(https?:|www\.)/i.test(label)&&/^[\w.-]+\.[a-z]{2,}/i.test(label))label='https://'+label;const vals=['phone','email','username','hobby'].includes(type)?label.split(type==='hobby'?/\s*[,;|\n]\s*/:type==='phone'?/\s*[;,|/\n]\s*/:/\s*[;,|\n]\s*/):[label];for(const v of vals)if(type!=='username'||!/^https?:/i.test(v))add(type,v,ev('поле «'+k+'»',path,value),['username','account'].includes(type)?hint:'',record)}scan(value,path,record,hint)}
  function walk(obj,path='$',depth=0,parentRecord=null,hint=''){if(depth>15){issues.push('Глубина структуры превышает 15 уровней');return}if(Array.isArray(obj)){if(obj.length>2000)issues.push(path+': обработаны первые 2000 записей');obj.slice(0,2000).forEach((x,i)=>{if(x&&typeof x==='object')walk(x,path+'['+i+']',depth+1);else if(x!==null)field(hint,x,path+'['+i+']',parentRecord)});return}if(!obj||typeof obj!=='object')return;const record=parentRecord||[];
  const parts={};for(const [k,v] of Object.entries(obj)){const t=fieldType(k);if(['given','surname','patronymic'].includes(t)&&typeof v==='string')parts[t]=v}if(parts.given&&parts.surname){const full=[parts.given,parts.patronymic,parts.surname].filter(Boolean).join(' ');add('person',full,ev('имя из отдельных полей',path,full),'',record)}
  if(obj['@type']==='PostalAddress'){const label=['addressCountry','addressRegion','addressLocality','streetAddress','postalCode'].map(k=>obj[k]).filter(v=>typeof v==='string').join(', ');if(label)add('address',label,ev('структурированный почтовый адрес',path,label),'',record)}
@@ -174,7 +175,7 @@ const Analyzer=(()=>{
  const relations=[],relKeys=new Set;for(const record of records){const root=record.find(k=>k.startsWith('person:'))||record.find(k=>k.startsWith('username:'));if(root)for(const other of record)if(other!==root&&!relKeys.has(root+'|'+other)){relKeys.add(root+'|'+other);relations.push({from:root,to:other,label:'указано в одной записи'})}}
  return{entities:[...entities.values()],relations,issues,capped};
  }
- return{analyze,key,phone,csv,fieldType,birthDate,version:'4.1'};
+ return{analyze,key,phone,csv,fieldType,birthDate,version:'4.4'};
 })();
 
 const LayoutEngine=(()=>{
@@ -287,6 +288,7 @@ $('#workspace').onclick=()=>{if(selected||selectedEdge)$('#inspector').classList
 const settingsBtn=document.createElement('button');settingsBtn.className='tool mobile-settings';settingsBtn.textContent='⚙ Вид';settingsBtn.onclick=()=>{$('#inspector').classList.toggle('collapsed')};autoBtn.after(settingsBtn);
 const projectsBtn=document.createElement('button');projectsBtn.className='tool mobile-settings';projectsBtn.textContent='Проекты';projectsBtn.onclick=caseDialog;settingsBtn.after(projectsBtn);
 
+Object.assign(types,{employment:['РАБОТА','#f1bd74'],education:['ОБРАЗОВАНИЕ','#88bfff'],hobby:['ХОББИ','#e7a3d4'],pet:['ПИТОМЕЦ','#91d5ab'],vehicle:['АВТОМОБИЛЬ','#9ba9ff']});
 Object.assign(types,{phone:['ТЕЛЕФОН','#56d6be'],address:['АДРЕС','#edb266'],organization:['ОРГАНИЗАЦИЯ','#a6c8fb'],domain:['ДОМЕН','#79bed8'],ip:['IP-АДРЕС','#e4a7de'],account:['ID АККАУНТА','#90d4a1'],date:['ДАТА РОЖДЕНИЯ','#b7b4ff']});
 types.person[0]='ЧЕЛОВЕК';types.username[0]='ПОЛЬЗОВАТЕЛЬ';
 const oldTextSource=textSource;
@@ -823,6 +825,35 @@ function memberKeysDialog(){
 }
 accountButton.onclick=()=>{modal(`<h2>${esc(signedAccount?.name||'Аккаунт')}</h2><p>Роль: ${signedAccount?.role==='owner'?'владелец':'участник'}. Локальные проекты защищены шифрованием AES-GCM и отдельным ключом этого аккаунта.</p>${signedAccount?.role==='owner'?'<button class="btn" id="openMemberKeys">Ключи участников</button>':''}<div class="modalactions"><button class="btn" id="closeAccount">Закрыть</button><button class="btn" id="logoutAccount">Выйти из аккаунта</button></div>`);$('#closeAccount').onclick=closeModal;$('#logoutAccount').onclick=signOutAccount;if($('#openMemberKeys'))$('#openMemberKeys').onclick=memberKeysDialog};
 $('.footer span').innerHTML='<span class="dot"></span>SHADOWGRAPH 4.2 · ЗАЩИЩЁННОЕ ХРАНИЛИЩЕ';
+
+/* SHADOWGRAPH_AUTH_43 */
+let authProviders43={key:true,telegram:false,google:false,github:false},pendingProvider43=null,loginError43='';
+const providerNames43={telegram:'Telegram',google:'Google',github:'GitHub'};
+const loginBefore43=loginScreen;
+loginScreen=function(mode='login',providedKey=''){
+ loginBefore43(mode,providedKey);
+ $('.access-description').textContent=mode==='register'?'Введите ключ участника от владельца и выберите свободный ник. Этот ключ понадобится для следующих входов.':'Введите личный ключ SHADOWGRAPH или выберите подключённый сервис ниже.';
+ $('.access-local-note').textContent='Проекты хранятся зашифрованными в браузере этого устройства. Ключ заменяет пароль: храните его в секрете и передавайте только своему участнику.';
+ $$('.chatgpt-signin').forEach(el=>el.remove());
+ $('.access-providers').innerHTML=['telegram','google','github'].map(provider=>`<button type="button" data-provider="${provider}"><b aria-hidden="true">${provider==='telegram'?'↗':provider==='google'?'G':'⌘'}</b> ${providerNames43[provider]} <small>${authProviders43[provider]?'Войти':'Не подключён'}</small></button>`).join('');
+ $('#providerNote').textContent=Object.entries(authProviders43).some(([key,value])=>key!=='key'&&value)?'При первом входе через сервис подтвердите свой ключ, чтобы связать его с существующим профилем.':'Сейчас доступен вход по ключу. Вход через сервисы подключает владелец.';
+ $$('[data-provider]').forEach(button=>button.onclick=()=>{const provider=button.dataset.provider;if(authProviders43[provider])location.assign('/api/auth/provider/'+provider);else $('#providerNote').textContent='Владелец ещё не подключил вход через '+providerNames43[provider]+'. Сейчас используйте свой ключ.'});
+ if(pendingProvider43){const note=document.createElement('p');note.className='access-provider-note';note.id='pendingProviderNote';note.textContent='Аккаунт '+(providerNames43[pendingProvider43.provider]||'сервиса')+' подтверждён. Введите свой ключ один раз для привязки к профилю SHADOWGRAPH. Новый участник может активировать выданный ему ключ во вкладке «Регистрация».';$('#keyForm').before(note)}
+ if(loginError43){$('#accessError').textContent=loginError43;loginError43=''}
+ $('#keyForm').onsubmit=async event=>{event.preventDefault();const button=$('#submitKey');button.disabled=true;$('#accessError').textContent='';const key=mode==='register'?$('#memberInviteKey').value:$('#accessKey').value;try{const data=await authRequest(mode==='register'?{action:'register',name:$('#accessName').value,key}:{action:'login',key});if(data.needsRegistration){loginScreen('register',key);return}pendingProvider43=null;await enterWorkspace(data.account,data.vaultKey);if(data.providerLink)toast(data.providerLink.linked?'Вход через '+providerNames43[data.providerLink.provider]+' привязан к вашему профилю.':'Вход выполнен по ключу. Этот аккаунт сервиса уже привязан к другому профилю.')}catch(error){if($('#accessError'))$('#accessError').textContent=error.message;if($('#submitKey'))$('#submitKey').disabled=false}};
+};
+startExperience=async function(start){
+ workspaceStarter=start;$('.app').classList.add('entry-locked');$('.app').inert=true;
+ const accountRequest=fetch('/api/auth',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(15000)}).then(async response=>{if(!response.ok)throw Error('Сервис входа недоступен. Попробуйте обновить страницу.');return response.json()}).catch(()=>({error:'Не удалось проверить вход. Попробуйте войти по ключу или обновите страницу.'}));
+ if(!sessionStorage.getItem('sg-intro-seen')&&!matchMedia('(prefers-reduced-motion: reduce)').matches)await showIntro();
+ const status=await accountRequest;authProviders43={...authProviders43,...status.providers};pendingProvider43=status.pendingProvider||null;
+ const url=new URL(location.href),error=url.searchParams.get('auth_error');
+ if(error){const messages={provider_unavailable:'Этот способ входа ещё не подключён владельцем. Используйте ключ.',provider_unknown:'Неизвестный способ входа.',auth_unavailable:'Сервис входа временно недоступен.',flow_invalid:'Срок попытки входа истёк или она открыта в другом браузере. Выберите сервис ещё раз.',cancelled:'Вход через сервис отменён.',provider_failed:'Не удалось подтвердить аккаунт сервиса. Повторите вход или используйте ключ.',rate_limit:'Слишком много попыток входа. Подождите минуту.'};loginError43=messages[error]||'Не удалось выполнить вход через сервис.';url.searchParams.delete('auth_error');url.searchParams.delete('provider');history.replaceState(null,'',url.pathname+url.search+url.hash)}
+ if(status.account)await enterWorkspace(status.account,status.vaultKey);else{loginScreen();if(status.error)$('#accessError').textContent=status.error}
+};
+const memberDialogBefore43=memberKeysDialog;
+memberKeysDialog=function(){memberDialogBefore43();if(signedAccount?.role==='owner'&&$('#issueMemberKeys'))$('.modal p').textContent='Десять отдельных ключей для участников. При первой активации участник выбирает свободный ник. Этот же ключ используется для следующих входов и заменяет пароль. Участники не получают прав владельца.'};
+$('.footer span').innerHTML='<span class="dot"></span>SHADOWGRAPH 4.4 · ЗАЩИЩЁННОЕ ХРАНИЛИЩЕ';
 
 startExperience(()=>initDb()).catch(e=>{console.error(e);$('#saveState').textContent='STORAGE UNAVAILABLE';toast('Недоступно локальное хранилище браузера')});
 })();

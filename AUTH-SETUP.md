@@ -1,7 +1,41 @@
-# Authentication
+# SHADOWGRAPH: самостоятельный вход
 
-The private Sites/ChatGPT access boundary is preserved. Additional SHADOWGRAPH accounts are tied to that authenticated Site identity. Registration issues a 256-bit random key once; the database stores only its SHA-256 hash. Sessions use random tokens with hashed database records and HttpOnly, Secure, SameSite=Strict cookies. Registration/login are same-origin POST requests with rate limits. No secrets are embedded in the browser.
+Версия 4.3 не требует ChatGPT. Работают вход по ключу, серверные сессии и отдельный ключ шифрования каждого профиля. Существующие ID профилей, ключи SG1/SGM и ключи хранилища при обновлении не заменяются. Проекты остаются локальными и автоматически не синхронизируются между устройствами и доменами.
 
-Google, Telegram and GitHub buttons are explicitly marked as not connected. There are no fake successful social logins. Register provider applications and configure secrets through the Sites runtime configuration before implementing/enabling their verified server-side callback flows. The reserved Sites paths /callback and /signin-with-chatgpt must not be replaced. Use separate /api/auth/provider/* callback paths when the hosting platform supports these integrations.
+## Подключение сервисов
 
-Project files remain local to the browser and are separated by SHADOWGRAPH account ID. The first key account on the current browser adopts existing local projects without deleting the old database. Other key accounts get separate browser databases. Accounts/sessions are server-side; this is not cloud synchronization of project files.
+Зарегистрируйте приложения у нужных провайдеров. Значения ниже задаются через секретные настройки сервера; не добавляйте их в Git, HTML или чат. Для локальной разработки используйте игнорируемый файл настроек окружения.
+
+| Сервис | Настройки сервера | Разрешённый адрес возврата |
+| --- | --- | --- |
+| Google | GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET | https://ВАШ-ДОМЕН/api/auth/provider/google/callback |
+| Telegram | TELEGRAM_CLIENT_ID, TELEGRAM_CLIENT_SECRET | https://ВАШ-ДОМЕН/api/auth/provider/telegram/callback |
+| GitHub | GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET | https://ВАШ-ДОМЕН/api/auth/provider/github/callback |
+
+Оба значения обязательны для включения соответствующей кнопки. После изменения настроек заново опубликуйте приложение. Пока их нет, кнопка показывает «Не подключён» и объясняет, что доступен вход по ключу.
+
+Google: создайте OAuth-клиент типа Web application и задайте точный redirect URI. Запрашиваются только openid и profile.
+
+Telegram: откройте своего бота в BotFather → Login Widget, зарегистрируйте origin сайта и точный redirect URI, сохраните выданные Client ID/Client Secret. Это настройки нового Telegram OIDC; токен Bot API их не заменяет. Оставьте стандартный алгоритм подписи RS256. Разрешения на телефон и отправку сообщений не запрашиваются.
+
+GitHub: создайте OAuth App с точным callback URL. Используется только read:user, доступ к репозиториям не запрашивается.
+
+## Как привязывается профиль
+
+Первый успешный вход через сервис подтверждает только внешний аккаунт. Для доступа к существующим материалам пользователь один раз вводит личный ключ SHADOWGRAPH. Новый участник активирует ключ приглашения и выбирает свободный ник. Последующие входы через привязанный сервис открывают тот же профиль. Совпадения имён или почты недостаточно; внешний ID не переназначается другому профилю.
+
+Ключ остаётся запасным самостоятельным способом входа. Любой, кто знает его, получает доступ к соответствующему профилю; выдавайте ключи по одному и храните их как пароли. Участники не получают роль владельца.
+
+## Сервер и публикация
+
+Сайт должен разрешать открытие страницы входа без платформенной авторизации. Для существующего проекта Sites аудитория уже public; ограничение рабочей области обеспечивают серверные сессии и ключи. Зарезервированные пути платформы не переопределяются. Полный внешний перенос требует настройки окружения, серверной D1 и начального владельца администратором хостинга; первая открытая регистрация не назначает владельца.
+
+Применяйте все миграции drizzle по порядку. Миграция 0002 добавляет только таблицы внешних привязок и временных попыток входа; аккаунты и ключи хранилища она не изменяет.
+
+## Документация протоколов
+
+- [Google OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect)
+- [Telegram Login / OIDC](https://core.telegram.org/bots/telegram-login)
+- [GitHub OAuth App authorization](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps)
+
+Обработчики проверены на подписанных тестовых токенах и тестовых ответах сервисов. Проверка на настоящих провайдерах выполняется после регистрации приложений и настройки секретов.
